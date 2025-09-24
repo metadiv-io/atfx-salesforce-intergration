@@ -14,13 +14,14 @@ global class BatchSendAccountsEvona implements Database.Batchable<SObject>, Data
         // Get all field names for Account
         // Map<String, Schema.SObjectField> fieldMap = Schema.getGlobalDescribe().get('Account').getDescribe().fields.getMap();
         // List<String> fieldNames = new List<String>(fieldMap.keySet());
-        // String fieldList = String.join(fieldNames, ',');
 
 		// Get specific field names for Account
 		List<String> fieldNames = new List<String>();
         fieldNames.add('Id'); // Always include Id
         fieldNames.add('LastModifiedDate'); // Include for reference
         fieldNames.addAll(MONITORED_FIELDS); // Add monitored fields
+
+		String fieldList = String.join(fieldNames, ',');
 
         String soql = 'SELECT ' + fieldList + ' FROM Account WHERE LastModifiedDate >= :fiveMinutesAgo';
         System.debug('Dynamic SOQL: ' + soql);
