@@ -1,11 +1,26 @@
 global class BatchSendAccountsEvona implements Database.Batchable<SObject>, Database.AllowsCallouts {
+	
+	// Define the fields to monitor
+    private static final Set<String> MONITORED_FIELDS = new Set<String>{
+		'Data_Validity__c',
+        'Phone',
+        'Lead_Validity__c',
+        'Status'
+    };
+
     global Database.QueryLocator start(Database.BatchableContext bc) {
         Datetime fiveMinutesAgo = System.now().addMinutes(-5);
 
         // Get all field names for Account
-        Map<String, Schema.SObjectField> fieldMap = Schema.getGlobalDescribe().get('Account').getDescribe().fields.getMap();
-        List<String> fieldNames = new List<String>(fieldMap.keySet());
-        String fieldList = String.join(fieldNames, ',');
+        // Map<String, Schema.SObjectField> fieldMap = Schema.getGlobalDescribe().get('Account').getDescribe().fields.getMap();
+        // List<String> fieldNames = new List<String>(fieldMap.keySet());
+        // String fieldList = String.join(fieldNames, ',');
+
+		// Get specific field names for Account
+		List<String> fieldNames = new List<String>();
+        fieldNames.add('Id'); // Always include Id
+        fieldNames.add('LastModifiedDate'); // Include for reference
+        fieldNames.addAll(MONITORED_FIELDS); // Add monitored fields
 
         String soql = 'SELECT ' + fieldList + ' FROM Account WHERE LastModifiedDate >= :fiveMinutesAgo';
         System.debug('Dynamic SOQL: ' + soql);
