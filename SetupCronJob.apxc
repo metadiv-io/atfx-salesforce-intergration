@@ -1,6 +1,7 @@
-// This example is run the batch update class in every 5 mins
+// Schedule the batch to run every 5 minutes
+String className = 'BatchSendAccountsEvonaScheduler';
 for (Integer i = 0; i < 60; i += 5) {
-  String cronExp = '0 ' + i + ' * * * ?';
-  String jobName = 'evona-send-account-updates-' + i;
-  System.schedule(jobName, cronExp, new BatchSendAccountsEvona());
+    String cronExp = '0 ' + i + ' * * * ?';
+    String jobName = 'evona-send-account-updates-' + i;
+    System.schedule(jobName, cronExp, new BatchSendAccountsEvonaScheduler());
 }
