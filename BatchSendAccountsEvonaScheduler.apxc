@@ -1,0 +1,8 @@
+public class BatchSendAccountsEvonaScheduler implements Schedulable {
+    public void execute(SchedulableContext sc) {
+        // Instantiate and execute your batch class
+        BatchSendAccountsEvona batch = new BatchSendAccountsEvona();
+        // Execute with a specific batch size (e.g., 200)
+        Database.executeBatch(batch, 200);
+    }
+}
