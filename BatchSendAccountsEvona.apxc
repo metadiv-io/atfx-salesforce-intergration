@@ -1,0 +1,56 @@
+global class BatchSendAccountsEvona implements Database.Batchable<SObject>, Database.AllowsCallouts {
+    global Database.QueryLocator start(Database.BatchableContext bc) {
+        Datetime fiveMinutesAgo = System.now().addMinutes(-5);
+
+        // Get all field names for Account
+        Map<String, Schema.SObjectField> fieldMap = Schema.getGlobalDescribe().get('Account').getDescribe().fields.getMap();
+        List<String> fieldNames = new List<String>(fieldMap.keySet());
+        String fieldList = String.join(fieldNames, ',');
+
+        String soql = 'SELECT ' + fieldList + ' FROM Account WHERE LastModifiedDate >= :fiveMinutesAgo';
+        System.debug('Dynamic SOQL: ' + soql);
+        return Database.getQueryLocator(soql); // This works because getQueryLocator accepts a dynamic string
+    }
+
+    global void execute(Database.BatchableContext bc, List<SObject> scope) {
+    	List<Account> accs = (List<Account>)scope;
+    	System.debug('Accounts in scope: ' + accs);
+
+    	if (accs.isEmpty()) return;
+
+    	// Build field API name → label map
+    	Map<String, Schema.SObjectField> fieldMap = Schema.getGlobalDescribe().get('Account').getDescribe().fields.getMap();
+	    Map<String, String> apiNameToLabel = new Map<String, String>();
+    	for (String apiName : fieldMap.keySet()) {
+        	String label = fieldMap.get(apiName).getDescribe().getLabel();
+	        apiNameToLabel.put(apiName, label);
+    	}
+
+	    // Package JSON structure
+    	Map<String, Object> wrapper = new Map<String, Object>();
+	    wrapper.put('data', accs);
+    	wrapper.put('fieldLabelMap', apiNameToLabel); // include the mapping
+
+	    String payload = JSON.serialize(wrapper);
+    	System.debug('Payload: ' + payload);
+
+	    HttpRequest req = new HttpRequest();
+	    req.setEndpoint('https://api.evona.metadiv.io/v1/public/salesforce/account/webhook/Vm8UaPFZpynrhWqwemmmD');
+    	req.setMethod('POST');
+	    req.setHeader('Content-Type', 'application/json');
+	    req.setBody(payload);
+
+    	Http http = new Http();
+	    try {
+    	    HttpResponse res = http.send(req);
+        	System.debug('HTTP Response Status: ' + res.getStatus());
+	        System.debug('HTTP Response Body: ' + res.getBody());
+    	} catch (Exception e) {
+        	System.debug(LoggingLevel.ERROR, 'Callout failed: ' + e.getMessage());
+    	}
+	}
+
+    global void finish(Database.BatchableContext bc) {
+        System.debug('BatchSendUpdates.finish() called');
+    }
+}
