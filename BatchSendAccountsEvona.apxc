@@ -2,18 +2,11 @@ global class BatchSendAccountsEvona implements Database.Batchable<SObject>, Data
 	
 	// Define the fields to monitor
     private static final Set<String> MONITORED_FIELDS = new Set<String>{
-		'Data_Validity__c',
-        'Phone',
-        'Lead_Validity__c',
-        'Status'
+                'AA_Number__c','AccountCreateDate__c','Account_Manager__c','AccountModifyDate__c','Name','OwnerId','Account_Validity__c','Activated_Date__c','Address__c','Age__c','Area_Code_AM__c','Area_Name__c','Balance_2_0__c','Blacklist_Comment__c','Blacklist_reason__c','Blacklisted_Date__c','KycStatus_Source__c','Branch__c','Call_Count__c','Campaign_Name__c','Check_By__c','CheckDate__c','Client_Label__c','Client_Source__c','Client_Type_2__c','Combined_First_Touch_Campaign__c','Combined_First_Touch_Channel__c','Combined_First_Touch_Medium__c','Combined_First_Touch_Term__c','Combined_UTM_Campaign__c','Combined_UTM_Content__c','Combined_UTM_Medium__c','Combined_UTM_Source__c','Combined_UTM_Term__c','Commission_Balance__c','Conversion_Cycle__c','Conversion_Owner__c','Country_of_Residence_Account__c','Credit__c','Currency__c','Email__c','Email_Language__c','Entity__c','First_Click_Campaign__c','First_Click_Content__c','First_Click_Medium__c','First_Click_Source__c','First_Click_Term__c','First_Contact_Date_Conversion_Owner__c','First_Contact_Date__c','FirstDepositAmount__c','First_Deposit_Date2__c','First_Click_Channel__c','First_Touch_Channel_Detail__c','First_Trade_Date2__c','First_UTM_Tag__c','Fixed_UTM_Campaign__c','Fixed_UTM_Content__c','Fixed_UTM_Source__c','Fixed_UTM_Term__c','translatedFullName__c','Gender__c','Inactive_Days__c','Is_IB_Client__c','Is_Migrate__c','Is_Multi_Nationality__c','Is_Offline_Element__c','Is_Referred_by_Sales__c','Is_Risk_Tolerance__c','IsSalesActive__c','Is_Test_Account__c','Is_US_Resident__c','IsSalesLead__c','IsSameConversionOwner__c','IsUK_LATAM__c','Last_Call_Date__c','Last_Click_Campaign__c','Last_Click_Content__c','Last_Click_Medium__c','Last_Click_Source__c','Last_Click_Term__c','Last_Comm_Reved_Date__c','Last_Commission_Date__c','Last_Deposit_Amount__c','Last_Deposit_DateTime__c','Last_Email_Sent_Date__c','LastModifiedById','Last_Position_DateTime__c','Last_registration_date__c','Last_Stopped_Out_Date__c','Last_Click_Channel__c','Last_Touch_Channel_Detail__c','Last_Trade_Date__c','Latest_UTM_Campaign__c','Latest_UTM_Content__c','Latest_UTM_Medium__c','Latest_UTM_Source__c','Latest_UTM_Term__c','Lead_UTM_Campaign__c','Lead_UTM_Content__c','Lead_UTM_Medium__c','Lead_UTM_Source__c','Lead_UTM_Term__c','Lead_Validity__c','Live_UTM_Campaign__c','Live_UTM_Content__c','Live_UTM_Medium__c','Live_UTM_Source__c','Live_UTM_Term__c','ATNumber__c','Net_Deposit_USD__c','Next_Activity_Date__c','ParentId','Phone','Process_By__c','Region_Name__c','Registered_City__c','Registered_Country_Account2__c','Registered_IP__c','Create_Date__c','Risk_Level__c','Sales_Name__c','SecondCheckDate__c','Staff_Id__c','Terminate_By__c','Terminate_Date__c','Terminated__c','Total_Deposit__c','Total_Transfer_In_USD__c','Total_Transfer_Out_USD__c','Total_Withdrawal__c','Type'
     };
 
     global Database.QueryLocator start(Database.BatchableContext bc) {
         Datetime fiveMinutesAgo = System.now().addMinutes(-5);
-
-        // Get all field names for Account
-        // Map<String, Schema.SObjectField> fieldMap = Schema.getGlobalDescribe().get('Account').getDescribe().fields.getMap();
-        // List<String> fieldNames = new List<String>(fieldMap.keySet());
 
 		// Get specific field names for Account
 		List<String> fieldNames = new List<String>();
@@ -23,9 +16,13 @@ global class BatchSendAccountsEvona implements Database.Batchable<SObject>, Data
 
 		String fieldList = String.join(fieldNames, ',');
 
-        String soql = 'SELECT ' + fieldList + ' FROM Account WHERE LastModifiedDate >= :fiveMinutesAgo';
+        // Add Owner fields explicitly (OwnerId is already in MONITORED_FIELDS)
+        String soql = 'SELECT ' + fieldList + 
+                      ', Owner.Email, Owner.Name ' +
+                      'FROM Account WHERE LastModifiedDate >= :fiveMinutesAgo';
+        
         System.debug('Dynamic SOQL: ' + soql);
-        return Database.getQueryLocator(soql); // This works because getQueryLocator accepts a dynamic string
+        return Database.getQueryLocator(soql); 
     }
 
     global void execute(Database.BatchableContext bc, List<SObject> scope) {
@@ -42,16 +39,36 @@ global class BatchSendAccountsEvona implements Database.Batchable<SObject>, Data
 	        apiNameToLabel.put(apiName, label);
     	}
 
-	    // Package JSON structure
-    	Map<String, Object> wrapper = new Map<String, Object>();
-	    wrapper.put('data', accs);
-    	wrapper.put('fieldLabelMap', apiNameToLabel); // include the mapping
+	    // Build wrapper for payload
+    	List<Map<String, Object>> accountData = new List<Map<String, Object>>();
+    	for (Account acc : accs) {
+	        // Copy into a new writable Map (since getPopulatedFieldsAsMap() is read-only)
+	        Map<String, Object> accMap = new Map<String, Object>();
+	        accMap.putAll(acc.getPopulatedFieldsAsMap());
+
+	        // Add owner info explicitly
+	        Map<String, Object> ownerInfo = new Map<String, Object>();
+	        ownerInfo.put('Id', acc.OwnerId);
+
+	        if (acc.Owner != null && acc.Owner.getSObjectType() == User.SObjectType) {
+	            ownerInfo.put('Email', acc.Owner.Email);
+	            ownerInfo.put('Name', acc.Owner.Name);
+	        }
+	        
+	        accMap.put('Owner', ownerInfo);
+
+	        accountData.add(accMap);
+	    }
+
+	    Map<String, Object> wrapper = new Map<String, Object>();
+	    wrapper.put('data', accountData);
+	    wrapper.put('fieldLabelMap', apiNameToLabel);
 
 	    String payload = JSON.serialize(wrapper);
     	System.debug('Payload: ' + payload);
 
 	    HttpRequest req = new HttpRequest();
-	    req.setEndpoint('https://api.evona.metadiv.io/v1/public/salesforce/account/webhook/Vm8UaPFZpynrhWqwemmmD');
+	    req.setEndpoint('https://api.atfx.metadiv.io/public/v1/salesforce/account/webhook/KYUnULnMiDtELCGVwwMak');
     	req.setMethod('POST');
 	    req.setHeader('Content-Type', 'application/json');
 	    req.setBody(payload);
@@ -67,6 +84,6 @@ global class BatchSendAccountsEvona implements Database.Batchable<SObject>, Data
 	}
 
     global void finish(Database.BatchableContext bc) {
-        System.debug('BatchSendUpdates.finish() called');
+        System.debug('BatchSendAccountsEvona.finish() called');
     }
 }
