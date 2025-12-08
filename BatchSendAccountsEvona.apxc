@@ -1,89 +1,436 @@
 global class BatchSendAccountsEvona implements Database.Batchable<SObject>, Database.AllowsCallouts {
-	
-	// Define the fields to monitor
-    private static final Set<String> MONITORED_FIELDS = new Set<String>{
-                'AA_Number__c','AccountCreateDate__c','Account_Manager__c','AccountModifyDate__c','Name','OwnerId','Account_Validity__c','Activated_Date__c','Address__c','Age__c','Area_Code_AM__c','Area_Name__c','Balance_2_0__c','Blacklist_Comment__c','Blacklist_reason__c','Blacklisted_Date__c','KycStatus_Source__c','Branch__c','Call_Count__c','Campaign_Name__c','Check_By__c','CheckDate__c','Client_Label__c','Client_Source__c','Client_Type_2__c','Combined_First_Touch_Campaign__c','Combined_First_Touch_Channel__c','Combined_First_Touch_Medium__c','Combined_First_Touch_Term__c','Combined_UTM_Campaign__c','Combined_UTM_Content__c','Combined_UTM_Medium__c','Combined_UTM_Source__c','Combined_UTM_Term__c','Commission_Balance__c','Conversion_Cycle__c','Conversion_Owner__c','Country_of_Residence_Account__c','Credit__c','Currency__c','Email__c','Email_Language__c','Entity__c','First_Click_Campaign__c','First_Click_Content__c','First_Click_Medium__c','First_Click_Source__c','First_Click_Term__c','First_Contact_Date_Conversion_Owner__c','First_Contact_Date__c','FirstDepositAmount__c','First_Deposit_Date2__c','First_Click_Channel__c','First_Touch_Channel_Detail__c','First_Trade_Date2__c','First_UTM_Tag__c','Fixed_UTM_Campaign__c','Fixed_UTM_Content__c','Fixed_UTM_Source__c','Fixed_UTM_Term__c','translatedFullName__c','Gender__c','Inactive_Days__c','Is_IB_Client__c','Is_Migrate__c','Is_Multi_Nationality__c','Is_Offline_Element__c','Is_Referred_by_Sales__c','Is_Risk_Tolerance__c','IsSalesActive__c','Is_Test_Account__c','Is_US_Resident__c','IsSalesLead__c','IsSameConversionOwner__c','IsUK_LATAM__c','Last_Call_Date__c','Last_Click_Campaign__c','Last_Click_Content__c','Last_Click_Medium__c','Last_Click_Source__c','Last_Click_Term__c','Last_Comm_Reved_Date__c','Last_Commission_Date__c','Last_Deposit_Amount__c','Last_Deposit_DateTime__c','Last_Email_Sent_Date__c','LastModifiedById','Last_Position_DateTime__c','Last_registration_date__c','Last_Stopped_Out_Date__c','Last_Click_Channel__c','Last_Touch_Channel_Detail__c','Last_Trade_Date__c','Latest_UTM_Campaign__c','Latest_UTM_Content__c','Latest_UTM_Medium__c','Latest_UTM_Source__c','Latest_UTM_Term__c','Lead_UTM_Campaign__c','Lead_UTM_Content__c','Lead_UTM_Medium__c','Lead_UTM_Source__c','Lead_UTM_Term__c','Lead_Validity__c','Live_UTM_Campaign__c','Live_UTM_Content__c','Live_UTM_Medium__c','Live_UTM_Source__c','Live_UTM_Term__c','ATNumber__c','Net_Deposit_USD__c','Next_Activity_Date__c','ParentId','Phone','Process_By__c','Region_Name__c','Registered_City__c','Registered_Country_Account2__c','Registered_IP__c','Create_Date__c','Risk_Level__c','Sales_Name__c','SecondCheckDate__c','Staff_Id__c','Terminate_By__c','Terminate_Date__c','Terminated__c','Total_Deposit__c','Total_Transfer_In_USD__c','Total_Transfer_Out_USD__c','Total_Withdrawal__c','Type'
+  
+  // Define target countries
+  private static final Set<String> TARGET_COUNTRIES = new Set<String>{
+    'AIA', 'ATG', 'ARG', 'BHS', 'BRB', 'BLZ', 'BMU', 'BOL', 'BRA', 'VGB', 
+    'CYM', 'CHL', 'COL', 'CRI', 'CUB', 'DMA', 'DOM', 'ECU', 'SLV', 'GRD', 
+    'GTM', 'GUY', 'HTI', 'HND', 'JAM', 'MEX', 'NIC', 'PAN', 'PRY', 'PER', 
+    'PRI', 'URY', 'VEN', 'VNM'
+  };
+  
+  // Define specific fields for each object type
+  private static final List<String> LEAD_FIELDS = new List<String>{
+        'Id', 'LastModifiedDate', 'AA_Browser__c', 'AA_City__c', 'AA_Country__c', 'AA_Number__c', 'AA_Operating_System__c',
+        'Account_Manager__c', 'Agent__c', 'Area_Name__c', 'KycStatus_Source__c', 'Branch__c', 'Campaign_Name__c',
+        'gaconnector_City__c', 'Client_Source__c', 'Combined_First_Touch_Campaign__c', 'Combined_First_Touch_Channel__c',
+        'Combined_First_Touch_Medium__c', 'Combined_First_Touch_Term__c', 'Combined_Last_Touch_Channel__c',
+        'Company', 'ConversionAccountId__c', 'ATFX_Country__c', 'Converted__c', 'Converted_Date__c',
+        'Country_of_Residence_Lead__c', 'CreatedById', 'Created_By_Role_Name__c', 'Created_By_Sales__c',
+        'Created_DateTime__c', 'Data_From__c', 'Data_Validity__c', 'Client_Categorisation__c',
+        'Demo_Account_Currency__c', 'Demo_Account_Leverage__c', 'Demo_Account_Number__c',
+        'collaborating_with_brokers__c', 'Combine_Country__c', 'Demo_Account_Password__c',
+        'Demo_Balance_Summary__c', 'DemoDepositAmount__c', 'DemoFirstDepositAmount__c',
+        'First_Demo_Trade_Date__c', 'DemoFirstTradeAmount__c', 'Company_Name__c', 'Consent_Date__c',
+        'Consent_Description__c', 'Consent_Source__c', 'Demo_First_Trade_Symbol__c', 'Demo_Account_Balance__c',
+        'Demo_Last_Trade_Date__c', 'DemoLatsTradeAmount__c', 'Demo_Profit_Summary__c',
+        'Demo_Second_Trade_Symbol__c', 'Demo_Spread_Type__c', 'Demo_Third_Trade_Symbol__c',
+        'Demo_Account_Type__c', 'Demo_Volume_Summary__c', 'Device__c', 'Email', 'Email_language_lead__c',
+        'Entity__c', 'Entry_Pages__c', 'Existing_Account_No__c', 'Exit_Pages__c',
+        'gaconnector_First_Click_Campaign__c', 'gaconnector_First_Click_Content__c',
+        'gaconnector_First_Click_Landing_Page__c', 'gaconnector_First_Click_Medium__c',
+        'gaconnector_First_Click_Referrer__c', 'gaconnector_First_Click_Source__c',
+        'gaconnector_First_Click_Term__c', 'First_Contact_Date__c', 'FirstCreateDateDemo__c',
+        'FirstName', 'gaconnector_First_Click_Channel__c', 'First_Touch_Channel_Detail__c', 'Email__c', 'First_UTM_Tag__c',
+        'Fixed_UTM_Campaign_Touch__c', 'Fixed_UTM_Medium_Touch__c', 'Fixed_UTM_Term_Touch__c',
+        'From_IB_sales__c', 'From_App_TeamUp__c', 'GA_Client_ID_Formula__c', 'GCLID__c',
+        'pi__utm_campaign__c', 'gaconnector_Google_Analytics_Client_ID__c',
+        'pi__utm_content__c', 'gaconnector_Google_Analytics_Link__c', 'pi__utm_medium__c', 'pi__utm_source__c', 'pi__utm_term__c',
+        'Has_Live_Account__c', 'Has_Trading_Experience__c', 'IB_Support_owner__c', 'Industry__c',
+        'Invalid_Data__c', 'Invitation_Code__c', 'Is_Blacklist__c', 'Is_Demo_Downloaded__c',
+        'Is_Direct_Client__c', 'Is_IB_Client__c', 'Is_Referred_by_Sales__c', 'Landing_Page_Id__c',
+        'Landing_Page_Language__c', 'Last_Activity_Days__c', 'gaconnector_Last_Click_Campaign__c',
+        'gaconnector_Last_Click_Content__c', 'gaconnector_Last_Click_Landing_Page__c',
+        'gaconnector_Last_Click_Medium__c', 'gaconnector_Last_Click_Referrer__c',
+        'gaconnector_Last_Click_Source__c', 'IB_MT4_number__c', 'IB_Pass_From__c', 'Last_Click_Source_Medium__c',
+        'IB_Support_owner_Parent__c', 'IndividualId', 'gaconnector_Last_Click_Term__c',
+        'LastModifiedById', 'LastName', 'IsAttended__c', 'Last_registration_date__c',
+        'gaconnector_Last_Click_Channel__c', 'Last_Touch_Channel_Detail__c', 'Is_Duplicated_Lead__c',
+        'LastTransferDate', 'Latest_UTM_Campaign__c', 'Is_Test_Account__c', 'Latest_UTM_Content__c',
+        'Latest_UTM_Medium__c', 'Latest_UTM_Source__c', 'Latest_UTM_Term__c', 'Lead_Created_Date__c',
+        'OwnerId', 'Lead_Owner__c', 'LeadSource', 'Status', 'Lead_Type__c', 'Lead_Type_System__c',
+        'Last_Email_Sent_Date__c', 'Lead_Validity__c', 'Lead_Validity_Modified_Datetime__c',
+        'Lead_Validity_Type__c', 'Lead_Validity_Type_for_report__c', 'Line_ID__c', 'ATNumber__c',
+        'MIB__c', 'Ref_Mlm_IbCode__c', 'MobilePhone', 'et4ae5__Mobile_Country_Code__c', 'Name',
+        'Nationality__c', 'Next_Activity_Date__c', 'No_of_registrations__c', 'IB_Account__c',
+        'Parent_AT_Number__c', 'Phone', 'Platform__c', 'potential_clients__c', 'Prefer_Trade__c',
+        'Refer_Friend_Account__c', 'Referee_s_email__c', 'Referee_s_name__c', 'Referrer_Group__c',
+        'Referrer_Type__c', 'Referrer_s_email__c', 'Referrer_s_MT4_number__c', 'Referrer_s_name__c',
+        'Registered_City__c', 'Registered_IP__c', 'Registrant_Date__c', 'remarks__c',
+        'Sales_Branch__c', 'Referrer_Code__c', 'Trading_Experience__c', 'Registered_Country2__c',
+        'UTM_Branch__c', 'utm_campaign__c', 'Seminar_Name__c', 'utm_content__c', 'UTM_Country__c',
+        'UTM_Country_Enhance__c', 'utm_medium__c', 'utm_source__c', 'UTM_Tag__c', 'utm_term__c',
+        'utm_url__c', 'Webinar_Number__c', 'Webinar_Id__c', 'Webinar_Name__c', 'Broker_currently_with__c'
+    };
+    
+    private static final List<String> ACCOUNT_FIELDS = new List<String>{
+        'Id', 'LastModifiedDate', 'AA_Number__c', 'AccountCreateDate__c', 'Account_Manager__c',
+        'AccountModifyDate__c', 'Name', 'OwnerId', 'Account_Validity__c', 'Activated_Date__c',
+        'Address__c', 'Age__c', 'Area_Code_AM__c', 'Area_Name__c', 'Balance_2_0__c',
+        'Blacklist_Comment__c', 'Blacklist_reason__c', 'Blacklisted_Date__c', 'KycStatus_Source__c',
+        'Branch__c', 'Call_Count__c', 'Campaign_Name__c', 'Check_By__c', 'CheckDate__c',
+        'Client_Label__c', 'Client_Source__c', 'Client_Type_2__c', 'Combined_First_Touch_Campaign__c',
+        'Combined_First_Touch_Channel__c', 'Combined_First_Touch_Medium__c', 'Combined_First_Touch_Term__c',
+        'Combined_UTM_Campaign__c', 'Combined_UTM_Content__c', 'Combined_UTM_Medium__c',
+        'Combined_UTM_Source__c', 'Combined_UTM_Term__c', 'Commission_Balance__c', 'Conversion_Cycle__c',
+        'Conversion_Owner__c', 'Country_of_Residence_Account__c', 'Credit__c', 'Currency__c',
+        'Email__c', 'Email_Language__c', 'Entity__c', 'First_Click_Campaign__c', 'First_Click_Content__c',
+        'First_Click_Medium__c', 'First_Click_Source__c', 'First_Click_Term__c',
+        'First_Contact_Date_Conversion_Owner__c', 'First_Contact_Date__c', 'FirstDepositAmount__c',
+        'First_Deposit_Date2__c', 'First_Click_Channel__c', 'First_Touch_Channel_Detail__c',
+        'First_Trade_Date2__c', 'First_UTM_Tag__c', 'Fixed_UTM_Campaign__c', 'Fixed_UTM_Content__c',
+        'Fixed_UTM_Source__c', 'Fixed_UTM_Term__c', 'translatedFullName__c', 'Gender__c',
+        'Inactive_Days__c', 'Is_IB_Client__c', 'Is_Migrate__c', 'Is_Multi_Nationality__c',
+        'Is_Offline_Element__c', 'Is_Referred_by_Sales__c', 'Is_Risk_Tolerance__c', 'IsSalesActive__c',
+        'Is_Test_Account__c', 'Is_US_Resident__c', 'IsSalesLead__c', 'IsSameConversionOwner__c',
+        'IsUK_LATAM__c', 'Last_Call_Date__c', 'Last_Click_Campaign__c', 'Last_Click_Content__c',
+        'Last_Click_Medium__c', 'Last_Click_Source__c', 'Last_Click_Term__c', 'Last_Comm_Reved_Date__c',
+        'Last_Commission_Date__c', 'Last_Deposit_Amount__c', 'Last_Deposit_DateTime__c',
+        'Last_Email_Sent_Date__c', 'LastModifiedById', 'Last_Position_DateTime__c',
+        'Last_registration_date__c', 'Last_Stopped_Out_Date__c', 'Last_Click_Channel__c',
+        'Last_Touch_Channel_Detail__c', 'Last_Trade_Date__c', 'Latest_UTM_Campaign__c',
+        'Latest_UTM_Content__c', 'Latest_UTM_Medium__c', 'Latest_UTM_Source__c', 'Latest_UTM_Term__c',
+        'Lead_UTM_Campaign__c', 'Lead_UTM_Content__c', 'Lead_UTM_Medium__c', 'Lead_UTM_Source__c',
+        'Lead_UTM_Term__c', 'Lead_Validity__c', 'Live_UTM_Campaign__c', 'Live_UTM_Content__c',
+        'Live_UTM_Medium__c', 'Live_UTM_Source__c', 'Live_UTM_Term__c', 'ATNumber__c', 'Net_Deposit_USD__c', 'Next_Activity_Date__c',
+        'ParentId', 'Phone', 'Process_By__c', 'Region_Name__c', 'Registered_City__c',
+        'Registered_Country_Account2__c', 'Registered_IP__c', 'Create_Date__c', 'Risk_Level__c',
+        'Sales_Name__c', 'SecondCheckDate__c', 'Staff_Id__c', 'Terminate_By__c', 'Terminate_Date__c',
+        'Terminated__c', 'Total_Deposit__c', 'Total_Transfer_In_USD__c', 'Total_Transfer_Out_USD__c',
+        'Total_Withdrawal__c', 'Type'
+    };
+    
+    private static final List<String> TRADE_ACCOUNT_FIELDS = new List<String>{
+        'Id', 'Name', 'Account_Manager__c', 'Account_Name__c', 'Area__c',
+        'Area_Name__c', 'Balance__c', 'Branch__c', 'CopyTrade_IsActive__c', 'CopyTrade_RegDate__c',
+        'Copytrade__c', 'Create_Date__c', 'DepositInd__c', 'Email__c', 'Entity__c', 'Equity__c',
+        'FirstDepositDate__c', 'FirstTradeDate__c', 'Floating_P_L2__c', 'Is_ECN__c',
+        'IsGroupIncluded__c', 'Is_IB_Client__c', 'Last_Close_Trade_Date__c', 'Last_Open_Trade_Date__c',
+        'LastPositionDateTime__c', 'Last_Stopped_Out__c', 'Last_Stopped_Out_Date__c', 'Last_Trade_Date__c',
+        'Lots_Of_Close_Order__c', 'Lots_Of_Open_Position__c', 'ATNumber__c', 'MT4_Last_Login__c',
+        'MtAccType__c', 'MtCurrency__c', 'MTGroup__c', 'MtServer__c', 'MtStatus__c', 'MtType__c',
+        'No_Of_Close_Order__c', 'No_Of_Open_Position__c', 'Number_of_follower__c', 'PL__c',
+        'PAMM_MAM__c', 'Phone__c', 'Provider_Account_Number__c', 'Related_Account__c', 'Sales_Name__c', 'Spread_Type__c',
+        'Total_Deposit__c', 'Total_Lots__c', 'Total_Transfer_In__c', 'Total_Transfer_Out__c',
+        'Total_Withdrawal__c', 'Trading_Symbol__c', 'UTM_Campaign__c', 'UTM_Content__c',
+        'UTM_Medium__c', 'UTM_Source__c', 'UTM_Term__c', 'CreatedDate', 'LastModifiedDate', 'IsDelete__c'
+    };
+    
+    private static final List<String> CAMPAIGN_RECORD_FIELDS = new List<String>{
+        'Id', 'LastModifiedDate', 'AA_Browser__c', 'AA_City__c', 'AA_Country__c', 'AA_Number__c',
+        'AA_Operating_System__c', 'Acc_Type__c', 'Account_Name__c', 'Activated_Date__c',
+        'Advertising_Cloud_DSP__c', 'AFF_ID__c', 'Affiliate_Entity__c', 'Amount__c',
+        'Application_Page__c', 'Apply_Country__c', 'Approval_Date__c', 'Approval_Status__c',
+        'Assignment_Remark__c', 'ATFX_Connect__c', 'ATFX_Country__c', 'ATFX_Hidden_Country__c',
+        'Bonus_Registrant_Date__c', 'Branch__c', 'Browser_language_Lead__c', 'Campaign_Live_Date__c',
+        'Campaign_Off_Shelf_Date__c', 'Campaign_Purpose__c', 'Cancel_Date__c', 'gaconnector_City__c',
+        'collaborating_with_brokers__c', 'Combined_First_Touch_Campaign__c', 'Combined_First_Touch_Channel__c',
+        'Combined_First_Touch_Medium__c', 'Combined_First_Touch_Term__c', 'Combined_Last_Touch_Channel__c',
+        'Consent_Date__c', 'Consent_Description__c', 'Consent_Source__c', 'Content__c',
+        'Converted__c', 'Copytrade_Broker__c', 'Copytrade_Channel__c', 'Copytrade_NoPotentialClient__c',
+        'Copytrade_TradeHistory__c', 'Copytrade_type__c', 'gaconnector_Country__c', 'Country_of_Residence_Lead__c',
+        'Create_Date__c', 'CreatedById', 'Credit_In__c', 'Credit_In_Date__c', 'Credit_Out__c',
+        'Credit_Out_Date2__c', 'CXD_token__c', 'Data_From__c', 'Demo_Account_Balance__c',
+        'Demo_Account_Currency__c', 'Demo_Account_Leverage__c', 'Demo_Spread_Type__c', 'Demo_Account_Type__c',
+        'Deposit_Amount__c', 'Deposit_Date__c', 'Description__c', 'DSP__c', 'DSP_Placement__c',
+        'Email__c', 'Email_Language_Lead__c', 'Entity__c', 'Entry_Pages__c', 'Exit_Pages__c',
+        'First_Click_Campaign__c', 'First_Click_Content__c', 'First_Click_Medium__c', 'First_Click_Source__c',
+        'First_Click_Term__c', 'First_Deposit_Amount__c', 'First_Name__c', 'First_Touch_Channel__c',
+        'First_Touch_Channel_Detail__c', 'Fixed_UTM_Campaign_Touch__c', 'Fixed_UTM_Medium_Touch__c',
+        'Fixed_UTM_Term_Touch__c', 'Has_Live_Account__c', 'Has_Trading_Experience__c',
+        'Is_After_Activation_date__c', 'Is_Bonus_Application__c', 'Is_Duplicated_Lead__c',
+        'Is_LATAM_Bonus_Application__c', 'Is_SEA_Bonus_Application__c', 'Is_Test_Account__c',
+        'IsAfterActivation90D__c', 'Landing_Page_Id__c', 'Landing_Page_Language__c', 'Landing_Page_URL__c',
+        'Last_Click_Campaign__c', 'Last_Click_Content__c', 'Last_Click_Medium__c', 'Last_Click_Source__c',
+        'Last_Click_Term__c', 'LastModifiedById', 'Last_Name__c', 'Last_Touch_Channel__c',
+        'Last_Touch_Channel_Detail__c', 'Lead_Id_Fixed__c', 'Lead_ID__c', 'Lead_Owner__c',
+        'Lead_Source__c', 'Link_Partner__c', 'Live_Host_Name__c', 'Marketing_Material_Languages__c',
+        'ATNumber__c', 'Medium__c', 'MT_Name__c', 'MT4_Account_Number__c', 'Net_Deposit__c',
+        'Number_Of_Duplicate_Records__c', 'OwnerId', 'OwnerEmail__c', 'Pending_Step_Name__c',
+        'Period__c', 'Phone__c', 'Platform__c', 'Potential_Clients__c', 'Prefix_Phone__c',
+        'Programe_End_Date__c', 'Programe_Name__c', 'Programe_Start_Date__c', 'Promotion_Code__c',
+        'Promotion_Type__c', 'ReCalReferralStatus__c', 'Receiver_s_Address__c', 'Receiver_s_Name__c',
+        'Receiver_s_Phone__c', 'RecordTypeId', 'Refer_Friend_Account__c', 'Referee_s_email__c',
+        'Referee_s_name__c', 'Referee_email__c', 'Referee_name__c', 'Referral_Close_date__c',
+        'Referral_remark__c', 'Referral_Status__c', 'Referrer_Account__c', 'Referrer_Code__c',
+        'Referrer_Group__c', 'Referrer_Type__c', 'Referrer_email__c', 'Referrer_s_email__c',
+        'Referrer_s_MT4_number__c', 'Referrer_s_name__c', 'Referrer_name__c', 'Reg_Info_Check__c',
+        'Registered_City__c', 'Registered_Country__c', 'Registered_Country2__c', 'Registered_IP__c',
+        'Registrant_Date__c', 'Remarks__c', 'Reviewed_By_CS__c', 'Seminar_City__c', 'Source__c',
+        'Term__c', 'Total_Balance__c', 'Total_Existing_Credit__c', 'Total_Net_Deposit__c',
+        'Total_Ticket__c', 'Trade_Account__c', 'Trade_Account_Number__c', 'Unsubscribe_reason__c',
+        'Update_Type__c', 'UTM_Campaign__c', 'UTM_Content__c', 'UTM_Medium__c', 'UTM_Source__c',
+        'UTM_Term__c', 'UTM_URL__c', 'Require_Lot__c', 'Withdrawable__c'
     };
 
     global Database.QueryLocator start(Database.BatchableContext bc) {
         Datetime fiveMinutesAgo = System.now().addMinutes(-5);
 
-		// Get specific field names for Account
-		List<String> fieldNames = new List<String>();
-        fieldNames.add('Id'); // Always include Id
-        fieldNames.add('LastModifiedDate'); // Include for reference
-        fieldNames.addAll(MONITORED_FIELDS); // Add monitored fields
-
-		String fieldList = String.join(fieldNames, ',');
-
-        // Add Owner fields explicitly (OwnerId is already in MONITORED_FIELDS)
-        String soql = 'SELECT ' + fieldList + 
-                      ', Owner.Email, Owner.Name ' +
-                      'FROM Account WHERE LastModifiedDate >= :fiveMinutesAgo';
+        // Query recently updated Account records
+        String soql = 'SELECT Id, LastModifiedDate FROM Account WHERE LastModifiedDate >= :fiveMinutesAgo';
         
         System.debug('Dynamic SOQL: ' + soql);
         return Database.getQueryLocator(soql); 
     }
+    
+  // Helper to build field label map for specific fields
+  private Map<String, String> buildFieldLabelMap(String objectType, List<String> fieldApiNames) {
+    Map<String, String> apiNameToLabel = new Map<String, String>();
+    
+    Schema.SObjectType objType = Schema.getGlobalDescribe().get(objectType);
+    if (objType == null) return apiNameToLabel;
+    
+    Map<String, Schema.SObjectField> fieldMap = objType.getDescribe().fields.getMap();
+    
+    for (String apiName : fieldApiNames) {
+      if (fieldMap.containsKey(apiName)) {
+        Schema.SObjectField field = fieldMap.get(apiName);
+        if (field != null) {
+          String label = field.getDescribe().getLabel();
+          apiNameToLabel.put(apiName, label);
+        }
+      }
+    }
+    
+    return apiNameToLabel;
+  }
 
     global void execute(Database.BatchableContext bc, List<SObject> scope) {
-    	List<Account> accs = (List<Account>)scope;
-    	System.debug('Accounts in scope: ' + accs);
+      Datetime fiveMinutesAgo = System.now().addMinutes(-5);
+      
+      System.debug('Scope size: ' + scope.size());
 
-    	if (accs.isEmpty()) return;
+      // Extract Account IDs from scope
+      Set<Id> accountIds = new Set<Id>();
+      for (SObject acc : scope) {
+        accountIds.add(acc.Id);
+      }
 
-    	// Build field API name → label map
-    	Map<String, Schema.SObjectField> fieldMap = Schema.getGlobalDescribe().get('Account').getDescribe().fields.getMap();
-	    Map<String, String> apiNameToLabel = new Map<String, String>();
-    	for (String apiName : fieldMap.keySet()) {
-        	String label = fieldMap.get(apiName).getDescribe().getLabel();
-	        apiNameToLabel.put(apiName, label);
-    	}
+      // Query Accounts first to get ATNumbers for related records
+      List<SObject> accounts = new List<SObject>();
+      Set<String> atNumbers = new Set<String>();
+      try {
+        accounts = queryAccountsByIds(accountIds);
+        System.debug('Found ' + accounts.size() + ' Accounts in scope (out of ' + accountIds.size() + ' Account IDs)');
+        if (accounts.isEmpty() && !accountIds.isEmpty()) {
+          System.debug('WARNING: No Accounts matched filter criteria. Accounts may not have Country_of_Residence_Account__c IN TARGET_COUNTRIES or ATNumber__c is null');
+          // Debug: Check what Account IDs we have and their fields
+          List<Account> debugAccounts = [SELECT Id, Name, Country_of_Residence_Account__c, ATNumber__c FROM Account WHERE Id IN :accountIds LIMIT 10];
+          System.debug('Sample Account details from scope: ' + JSON.serialize(debugAccounts));
+          System.debug('TARGET_COUNTRIES: ' + JSON.serialize(TARGET_COUNTRIES));
+        }
+        
+        // Extract ATNumbers for querying related records
+        for (SObject acc : accounts) {
+          Object atNumberObj = acc.get('ATNumber__c');
+          if (atNumberObj != null) {
+            atNumbers.add(String.valueOf(atNumberObj));
+          }
+        }
+        System.debug('Extracted ' + atNumbers.size() + ' ATNumbers from ' + accounts.size() + ' Accounts');
+      } catch (Exception e) {
+        System.debug('Error querying Accounts: ' + e.getMessage());
+        System.debug('Stack trace: ' + e.getStackTraceString());
+      }
 
-	    // Build wrapper for payload
-    	List<Map<String, Object>> accountData = new List<Map<String, Object>>();
-    	for (Account acc : accs) {
-	        // Copy into a new writable Map (since getPopulatedFieldsAsMap() is read-only)
-	        Map<String, Object> accMap = new Map<String, Object>();
-	        accMap.putAll(acc.getPopulatedFieldsAsMap());
+      // Query all four object types independently with their filtering criteria
+      // BUT only query records related to the Accounts in scope
+      List<Map<String, Object>> allRecords = new List<Map<String, Object>>();
+      
+      // Extract filtered Account IDs before clearing accounts list
+      Set<Id> filteredAccountIds = new Set<Id>();
+      for (SObject acc : accounts) {
+        filteredAccountIds.add(acc.Id);
+      }
+      
+      // 1. Build Account records
+      try {
+        for (SObject acc : accounts) {
+          Map<String, Object> record = buildRecord('Account', acc);
+          if (record != null) allRecords.add(record);
+        }
+        accounts.clear(); // Free memory
+      } catch (Exception e) {
+        System.debug('Error building Account records: ' + e.getMessage());
+      }
+      
+      // 2. Query Leads with filtering (only related to Accounts in scope)
+      try {
+        List<SObject> leads = queryLeadsByATNumbers(atNumbers, fiveMinutesAgo);
+        System.debug('Found ' + leads.size() + ' Leads related to scope');
+        for (SObject lead : leads) {
+          Map<String, Object> record = buildRecord('Lead', lead);
+          if (record != null) allRecords.add(record);
+        }
+        leads.clear(); // Free memory
+      } catch (Exception e) {
+        System.debug('Error querying Leads: ' + e.getMessage());
+      }
+      
+      // 3. Query Trade Accounts with filtering (only related to filtered Accounts in scope)
+      try {
+        List<SObject> tradeAccounts = queryTradeAccountsByAccountIds(filteredAccountIds);
+        System.debug('Found ' + tradeAccounts.size() + ' Trade Accounts related to scope');
+        for (SObject ta : tradeAccounts) {
+          Map<String, Object> record = buildRecord('TradeAccount', ta);
+          if (record != null) allRecords.add(record);
+        }
+        tradeAccounts.clear(); // Free memory
+      } catch (Exception e) {
+        System.debug('Error querying Trade Accounts: ' + e.getMessage());
+      }
+      
+      // 4. Query Campaign Records with filtering (only related to Accounts in scope)
+      try {
+        List<SObject> campaignRecords = queryCampaignRecordsByATNumbers(atNumbers, fiveMinutesAgo);
+        System.debug('Found ' + campaignRecords.size() + ' Campaign Records related to scope');
+        for (SObject cr : campaignRecords) {
+          Map<String, Object> record = buildRecord('CampaignRecord', cr);
+          if (record != null) allRecords.add(record);
+        }
+        campaignRecords.clear(); // Free memory
+      } catch (Exception e) {
+        System.debug('Error querying Campaign Records: ' + e.getMessage());
+      }
+      
+  // Count records by type for debugging
+  Map<String, Integer> recordCountByType = new Map<String, Integer>();
+  for (Map<String, Object> rec : allRecords) {
+    String objType = (String)rec.get('objectType');
+    if (recordCountByType.containsKey(objType)) {
+      recordCountByType.put(objType, recordCountByType.get(objType) + 1);
+    } else {
+      recordCountByType.put(objType, 1);
+    }
+  }
+  System.debug('Record counts by type: ' + JSON.serialize(recordCountByType));
+  System.debug('Total records collected: ' + allRecords.size());
+  
+  // Capture ATNumbers for debugging before clearing
+  Set<String> atNumbersDebug = new Set<String>(atNumbers);
+  
+  // Clear ATNumbers set to free memory
+  atNumbers.clear();
+  
+  // If no records to send, return
+  if (allRecords.isEmpty()) {
+    System.debug('No records to send - allRecords is empty. This batch contained ' + scope.size() + ' Account(s) in scope, but none matched the filter criteria.');
+    System.debug('Check if Accounts have: Country_of_Residence_Account__c IN TARGET_COUNTRIES AND ATNumber__c != null');
+    System.debug('Account IDs in scope: ' + JSON.serialize(accountIds));
+    System.debug('ATNumbers extracted: ' + JSON.serialize(atNumbersDebug));
+    System.debug('Record counts by type: ' + JSON.serialize(recordCountByType));
+    return;
+  }
 
-	        // Add owner info explicitly
-	        Map<String, Object> ownerInfo = new Map<String, Object>();
-	        ownerInfo.put('Id', acc.OwnerId);
+  // Build field API name → label maps for the SPECIFIC fields only
+  // Note: These are static and could be cached, but building them here to avoid heap issues
+  Map<String, Map<String, String>> fieldLabelMaps = new Map<String, Map<String, String>>();
+  fieldLabelMaps.put('Account', buildFieldLabelMap('Account', ACCOUNT_FIELDS));
+  fieldLabelMaps.put('Lead', buildFieldLabelMap('Lead', LEAD_FIELDS));
+  fieldLabelMaps.put('TradeAccount', buildFieldLabelMap('TradeAccount__c', TRADE_ACCOUNT_FIELDS));
+  fieldLabelMaps.put('CampaignRecord', buildFieldLabelMap('Campaign_Record__c', CAMPAIGN_RECORD_FIELDS));
 
-	        if (acc.Owner != null && acc.Owner.getSObjectType() == User.SObjectType) {
-	            ownerInfo.put('Email', acc.Owner.Email);
-	            ownerInfo.put('Name', acc.Owner.Name);
-	        }
-	        
-	        accMap.put('Owner', ownerInfo);
+    // Build wrapper for payload
+    Map<String, Object> wrapper = new Map<String, Object>();
+    wrapper.put('data', allRecords);
+    wrapper.put('timestamp', System.now());
+    wrapper.put('count', allRecords.size());
+    wrapper.put('fieldLabelMaps', fieldLabelMaps);
 
-	        accountData.add(accMap);
-	    }
+      String payload = JSON.serialize(wrapper);
+      System.debug('Payload size: ' + payload.length() + ' characters, record count: ' + allRecords.size());
 
-	    Map<String, Object> wrapper = new Map<String, Object>();
-	    wrapper.put('data', accountData);
-	    wrapper.put('fieldLabelMap', apiNameToLabel);
+      // Clear large collections before making callout
+      allRecords.clear();
+      fieldLabelMaps.clear();
 
-	    String payload = JSON.serialize(wrapper);
-    	System.debug('Payload: ' + payload);
+      System.debug('About to make API callout to: https://api.atfx.metadiv.io/public/v1/salesforce/account/webhook/KYUnULnMiDtELCGVwwMak');
+      HttpRequest req = new HttpRequest();
+      req.setEndpoint('https://api.atfx.metadiv.io/public/v1/salesforce/account/webhook/KYUnULnMiDtELCGVwwMak');
+      req.setMethod('POST');
+      req.setHeader('Content-Type', 'application/json');
+      req.setTimeout(120000);
+      req.setBody(payload);
 
-	    HttpRequest req = new HttpRequest();
-	    req.setEndpoint('https://api.atfx.metadiv.io/public/v1/salesforce/account/webhook/KYUnULnMiDtELCGVwwMak');
-    	req.setMethod('POST');
-	    req.setHeader('Content-Type', 'application/json');
-	    req.setBody(payload);
-
-    	Http http = new Http();
-	    try {
-    	    HttpResponse res = http.send(req);
-        	System.debug('HTTP Response Status: ' + res.getStatus());
-	        System.debug('HTTP Response Body: ' + res.getBody());
-    	} catch (Exception e) {
-        	System.debug(LoggingLevel.ERROR, 'Callout failed: ' + e.getMessage());
-    	}
-	}
+      Http http = new Http();
+      try {
+          HttpResponse res = http.send(req);
+          System.debug('HTTP Response Status: ' + res.getStatus());
+          System.debug('HTTP Response Body: ' + res.getBody());
+          System.debug('HTTP Response Status Code: ' + res.getStatusCode());
+      } catch (Exception e) {
+          System.debug(LoggingLevel.ERROR, 'Callout failed: ' + e.getMessage());
+          System.debug(LoggingLevel.ERROR, 'Callout exception type: ' + e.getTypeName());
+          System.debug(LoggingLevel.ERROR, 'Callout stack trace: ' + e.getStackTraceString());
+      }
+  }
 
     global void finish(Database.BatchableContext bc) {
         System.debug('BatchSendAccountsEvona.finish() called');
+    }
+    
+    // Build a record map with unique ID and all fields
+    private Map<String, Object> buildRecord(String objectType, SObject record) {
+      Map<String, Object> result = new Map<String, Object>();
+      
+      // Set unique ID (this is the record's Salesforce ID)
+      result.put('uniqueId', (String)record.get('Id'));
+      result.put('objectType', objectType);
+      result.put('lastModifiedDate', record.get('LastModifiedDate'));
+      
+      // Add all populated fields
+      Map<String, Object> populatedFields = record.getPopulatedFieldsAsMap();
+      for (String key : populatedFields.keySet()) {
+        result.put(key, populatedFields.get(key));
+      }
+      
+      return result;
+    }
+    
+    // Query Accounts by IDs from scope - using specific fields
+    private List<SObject> queryAccountsByIds(Set<Id> accountIds) {
+      if (accountIds.isEmpty()) {
+        return new List<SObject>();
+      }
+      
+      String fields = String.join(ACCOUNT_FIELDS, ', ');
+      String query = 'SELECT ' + fields + ' FROM Account WHERE Id IN :accountIds AND Country_of_Residence_Account__c IN :TARGET_COUNTRIES AND ATNumber__c != null';
+      List<SObject> results = Database.query(query);
+      return results;
+    }
+    
+    // Query Leads related to Accounts in scope - using specific fields
+    private List<SObject> queryLeadsByATNumbers(Set<String> atNumbers, Datetime fiveMinutesAgo) {
+      if (atNumbers.isEmpty()) {
+        return new List<SObject>();
+      }
+      
+      String fields = String.join(LEAD_FIELDS, ', ');
+      String query = 'SELECT ' + fields + ' FROM Lead WHERE LastModifiedDate >= :fiveMinutesAgo AND ATNumber__c IN :atNumbers AND Country_of_Residence_Lead__c IN :TARGET_COUNTRIES AND Is_Duplicated_Lead__c = false AND Is_Test_Account__c = false';
+      List<SObject> results = Database.query(query);
+      return results;
+    }
+    
+    // Query Trade Accounts by Account IDs from scope - using specific fields
+    private List<SObject> queryTradeAccountsByAccountIds(Set<Id> accountIds) {
+      if (accountIds.isEmpty()) {
+        return new List<SObject>();
+      }
+      
+      String fields = String.join(TRADE_ACCOUNT_FIELDS, ', ');
+      String query = 'SELECT ' + fields + ' FROM TradeAccount__c WHERE Related_Account__c IN :accountIds AND MtStatus__c IN (\'Active\', \'Suspend\') AND IsDelete__c = false';
+      List<SObject> results = Database.query(query);
+      return results;
+    }
+    
+    // Query Campaign Records related to Accounts in scope - using specific fields
+    private List<SObject> queryCampaignRecordsByATNumbers(Set<String> atNumbers, Datetime fiveMinutesAgo) {
+      if (atNumbers.isEmpty()) {
+        return new List<SObject>();
+      }
+      
+      String fields = String.join(CAMPAIGN_RECORD_FIELDS, ', ');
+      String query = 'SELECT ' + fields + ' FROM Campaign_Record__c WHERE LastModifiedDate >= :fiveMinutesAgo AND ATNumber__c IN :atNumbers AND Country_of_Residence_Lead__c IN :TARGET_COUNTRIES';
+      List<SObject> results = Database.query(query);
+      return results;
     }
 }
