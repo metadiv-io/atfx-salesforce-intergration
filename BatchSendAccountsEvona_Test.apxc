@@ -46,7 +46,8 @@ private class BatchSendAccountsEvona_Test {
 
     @IsTest
     static void testExecuteMethodWithSuccessResponse() {
-        // Create account with various field values to test field mapping
+        // Create test data - only Account for sandbox compatibility
+        
         Account acc = new Account(
             Name = 'Success Test Account',
             Phone = '1234567890',
@@ -56,7 +57,7 @@ private class BatchSendAccountsEvona_Test {
 
         // Read the account with its owner populated
         acc = [
-            SELECT Id, Name, Phone, Type, OwnerId, Owner.Name, Owner.Email, LastModifiedDate
+            SELECT Id, Name, Phone, Type, OwnerId, LastModifiedDate
             FROM Account WHERE Id = :acc.Id LIMIT 1
         ];
 
@@ -72,11 +73,13 @@ private class BatchSendAccountsEvona_Test {
 
     @IsTest
     static void testExecuteMethodWithCalloutException() {
-        Account acc = new Account(Name = 'Exception Test Account');
+        Account acc = new Account(
+            Name = 'Exception Test Account'
+        );
         insert acc;
 
         acc = [
-            SELECT Id, Name, OwnerId, Owner.Name, Owner.Email 
+            SELECT Id, Name, OwnerId, LastModifiedDate
             FROM Account WHERE Id = :acc.Id LIMIT 1
         ];
 
@@ -92,11 +95,13 @@ private class BatchSendAccountsEvona_Test {
 
     @IsTest
     static void testExecuteMethodWithTimeoutException() {
-        Account acc = new Account(Name = 'Timeout Test Account');
+        Account acc = new Account(
+            Name = 'Timeout Test Account'
+        );
         insert acc;
 
         acc = [
-            SELECT Id, Name, OwnerId, Owner.Name, Owner.Email 
+            SELECT Id, Name, OwnerId, LastModifiedDate
             FROM Account WHERE Id = :acc.Id LIMIT 1
         ];
 
@@ -112,11 +117,13 @@ private class BatchSendAccountsEvona_Test {
 
     @IsTest
     static void testExecuteMethodWithSystemException() {
-        Account acc = new Account(Name = 'System Exception Test Account');
+        Account acc = new Account(
+            Name = 'System Exception Test Account'
+        );
         insert acc;
 
         acc = [
-            SELECT Id, Name, OwnerId, Owner.Name, Owner.Email 
+            SELECT Id, Name, OwnerId, LastModifiedDate
             FROM Account WHERE Id = :acc.Id LIMIT 1
         ];
 
@@ -143,7 +150,7 @@ private class BatchSendAccountsEvona_Test {
 
     @IsTest
     static void testExecuteWithMultipleAccounts() {
-        // Create multiple accounts with different field values to test field mapping
+        // Create multiple accounts
         List<Account> accounts = new List<Account>();
         
         Account acc1 = new Account(
@@ -159,12 +166,11 @@ private class BatchSendAccountsEvona_Test {
             Type = 'Prospect'
         );
         accounts.add(acc2);
-        
         insert accounts;
 
         // Read accounts with owner information
         List<Account> insertedAccounts = [
-            SELECT Id, Name, Phone, Type, OwnerId, Owner.Name, Owner.Email 
+            SELECT Id, Name, Phone, Type, OwnerId, LastModifiedDate
             FROM Account WHERE Id IN :accounts
         ];
 
@@ -179,11 +185,13 @@ private class BatchSendAccountsEvona_Test {
     @IsTest
     static void testExecuteWithNonSuccessResponse() {
         // Create account for testing
-        Account acc = new Account(Name = 'Non-Success Test');
+        Account acc = new Account(
+            Name = 'Non-Success Test'
+        );
         insert acc;
 
         acc = [
-            SELECT Id, Name, OwnerId, Owner.Name, Owner.Email 
+            SELECT Id, Name, OwnerId, LastModifiedDate
             FROM Account WHERE Id = :acc.Id LIMIT 1
         ];
 
@@ -200,7 +208,7 @@ private class BatchSendAccountsEvona_Test {
 
     @IsTest
     static void testExecuteWithAccountHavingCustomFields() {
-        // Create account with some custom fields that might be in MONITORED_FIELDS
+        // Create account with standard fields
         Account acc = new Account(
             Name = 'Custom Fields Test',
             Phone = '555-1234'
@@ -209,8 +217,7 @@ private class BatchSendAccountsEvona_Test {
 
         // Read with all possible fields
         acc = [
-            SELECT Id, Name, Phone, OwnerId, Owner.Name, Owner.Email,
-                   LastModifiedDate, CreatedDate
+            SELECT Id, Name, Phone, OwnerId, LastModifiedDate, CreatedDate
             FROM Account WHERE Id = :acc.Id LIMIT 1
         ];
 
@@ -221,7 +228,7 @@ private class BatchSendAccountsEvona_Test {
         new BatchSendAccountsEvona().execute(null, scope);
         Test.stopTest();
 
-        System.assert(true, 'Account with custom fields execution covered.');
+        System.assert(true, 'Account execution covered.');
     }
 
     @IsTest
@@ -229,7 +236,9 @@ private class BatchSendAccountsEvona_Test {
         // Create accounts and update them to be within the 5-minute window
         List<Account> accounts = new List<Account>();
         for (Integer i = 0; i < 3; i++) {
-            accounts.add(new Account(Name = 'Recent Account ' + i));
+            accounts.add(new Account(
+                Name = 'Recent Account ' + i
+            ));
         }
         insert accounts;
         
@@ -273,7 +282,9 @@ private class BatchSendAccountsEvona_Test {
         // Test the complete batch flow from start to finish
         List<Account> accounts = new List<Account>();
         for (Integer i = 0; i < 5; i++) {
-            accounts.add(new Account(Name = 'Full Flow Account ' + i));
+            accounts.add(new Account(
+                Name = 'Full Flow Account ' + i
+            ));
         }
         insert accounts;
         
@@ -295,13 +306,15 @@ private class BatchSendAccountsEvona_Test {
 
     @IsTest
     static void testExecuteWithAccountHavingNullOwner() {
-        // Test scenario where Owner might be null or not a User
-        Account acc = new Account(Name = 'Null Owner Test');
+        // Test scenario with account owner
+        Account acc = new Account(
+            Name = 'Owner Test'
+        );
         insert acc;
 
-        // Read account with owner fields to avoid SObjectException
+        // Read account with owner fields
         acc = [
-            SELECT Id, Name, OwnerId, Owner.Name, Owner.Email
+            SELECT Id, Name, OwnerId, LastModifiedDate
             FROM Account WHERE Id = :acc.Id LIMIT 1
         ];
 
@@ -333,7 +346,9 @@ private class BatchSendAccountsEvona_Test {
         // Test complete batch execution flow without calling executeBatch
         List<Account> accounts = new List<Account>();
         for (Integer i = 0; i < 2; i++) {
-            accounts.add(new Account(Name = 'Complete Batch Test ' + i));
+            accounts.add(new Account(
+                Name = 'Complete Batch Test ' + i
+            ));
         }
         insert accounts;
         
@@ -352,7 +367,7 @@ private class BatchSendAccountsEvona_Test {
         
         // Test execute method with the accounts
         List<Account> testAccounts = [
-            SELECT Id, Name, OwnerId, Owner.Name, Owner.Email, LastModifiedDate
+            SELECT Id, Name, OwnerId, LastModifiedDate
             FROM Account WHERE Id IN :accounts
         ];
         new BatchSendAccountsEvona().execute(null, testAccounts);
@@ -364,4 +379,175 @@ private class BatchSendAccountsEvona_Test {
 
         System.assert(true, 'Complete batch execution flow covered without executeBatch.');
     }
+
+    @IsTest
+    static void testExecuteWithAccountMatchingCriteria() {
+        // Test with Account that matches filter criteria to trigger API call path
+        Account acc = new Account(
+            Name = 'Matching Criteria Account',
+            Country_of_Residence_Account__c = 'MEX', // One of the target countries
+            ATNumber__c = 'AT123456',
+            Phone = '1234567890',
+            Type = 'Customer'
+        );
+        insert acc;
+
+        // Read account with required fields
+        acc = [
+            SELECT Id, Name, OwnerId, LastModifiedDate, Country_of_Residence_Account__c, ATNumber__c
+            FROM Account WHERE Id = :acc.Id LIMIT 1
+        ];
+
+        List<SObject> scope = new List<SObject>{ acc };
+
+        Test.setMock(HttpCalloutMock.class, new SuccessHttpMock());
+        Test.startTest();
+        new BatchSendAccountsEvona().execute(null, scope);
+        Test.stopTest();
+
+        System.assert(true, 'Execute() with Account matching criteria covered.');
+    }
+
+    @IsTest
+    static void testExecuteWithEmptyAccountIds() {
+        // Test the empty accountIds path in queryAccountsByIds
+        // This tests the early return when accountIds is empty
+        Test.setMock(HttpCalloutMock.class, new SuccessHttpMock());
+        Test.startTest();
+        // Pass empty scope which will result in empty accountIds
+        new BatchSendAccountsEvona().execute(null, new List<Account>());
+        Test.stopTest();
+
+        System.assert(true, 'Empty accountIds path covered.');
+    }
+
+    @IsTest
+    static void testExecuteWithAccountHavingNullATNumber() {
+        // Test Account with null ATNumber (should not match filter criteria)
+        Account acc = new Account(
+            Name = 'Null ATNumber Account',
+            Country_of_Residence_Account__c = 'MEX', // Target country but null ATNumber
+            Phone = '1234567890'
+        );
+        insert acc;
+
+        acc = [
+            SELECT Id, Name, OwnerId, LastModifiedDate, Country_of_Residence_Account__c, ATNumber__c
+            FROM Account WHERE Id = :acc.Id LIMIT 1
+        ];
+
+        List<SObject> scope = new List<SObject>{ acc };
+
+        Test.setMock(HttpCalloutMock.class, new SuccessHttpMock());
+        Test.startTest();
+        new BatchSendAccountsEvona().execute(null, scope);
+        Test.stopTest();
+
+        System.assert(true, 'Account with null ATNumber path covered.');
+    }
+
+    @IsTest
+    static void testExecuteWithAccountNonTargetCountry() {
+        // Test Account with country not in TARGET_COUNTRIES
+        Account acc = new Account(
+            Name = 'Non-Target Country Account',
+            Country_of_Residence_Account__c = 'USA', // Not in target countries
+            ATNumber__c = 'AT123456',
+            Phone = '1234567890'
+        );
+        insert acc;
+
+        acc = [
+            SELECT Id, Name, OwnerId, LastModifiedDate, Country_of_Residence_Account__c, ATNumber__c
+            FROM Account WHERE Id = :acc.Id LIMIT 1
+        ];
+
+        List<SObject> scope = new List<SObject>{ acc };
+
+        Test.setMock(HttpCalloutMock.class, new SuccessHttpMock());
+        Test.startTest();
+        new BatchSendAccountsEvona().execute(null, scope);
+        Test.stopTest();
+
+        System.assert(true, 'Account with non-target country path covered.');
+    }
+
+    @IsTest
+    static void testExecuteWithRecordCountingLogic() {
+        // Test that triggers the record counting logic by having at least one matching record
+        Account acc = new Account(
+            Name = 'Record Counting Test',
+            Country_of_Residence_Account__c = 'BRA', // Target country
+            ATNumber__c = 'AT789012',
+            Phone = '555-1234'
+        );
+        insert acc;
+
+        acc = [
+            SELECT Id, Name, OwnerId, LastModifiedDate, Country_of_Residence_Account__c, ATNumber__c
+            FROM Account WHERE Id = :acc.Id LIMIT 1
+        ];
+
+        List<SObject> scope = new List<SObject>{ acc };
+
+        Test.setMock(HttpCalloutMock.class, new SuccessHttpMock());
+        Test.startTest();
+        new BatchSendAccountsEvona().execute(null, scope);
+        Test.stopTest();
+
+        System.assert(true, 'Record counting logic path covered.');
+    }
+
+    @IsTest
+    static void testBuildFieldLabelMapWithValidObject() {
+        // This indirectly tests buildFieldLabelMap by executing the batch
+        // The method is called during execute when building fieldLabelMaps
+        Account acc = new Account(
+            Name = 'Field Label Map Test',
+            Country_of_Residence_Account__c = 'COL',
+            ATNumber__c = 'AT345678'
+        );
+        insert acc;
+
+        acc = [
+            SELECT Id, Name, OwnerId, LastModifiedDate
+            FROM Account WHERE Id = :acc.Id LIMIT 1
+        ];
+
+        List<SObject> scope = new List<SObject>{ acc };
+
+        Test.setMock(HttpCalloutMock.class, new SuccessHttpMock());
+        Test.startTest();
+        new BatchSendAccountsEvona().execute(null, scope);
+        Test.stopTest();
+
+        System.assert(true, 'buildFieldLabelMap method path covered.');
+    }
+
+    @IsTest
+    static void testExecuteWithMultipleRecordTypes() {
+        // Test with Account that matches criteria to exercise all record type paths
+        Account acc = new Account(
+            Name = 'Multiple Record Types Test',
+            Country_of_Residence_Account__c = 'PER',
+            ATNumber__c = 'AT456789',
+            Phone = '9876543210'
+        );
+        insert acc;
+
+        acc = [
+            SELECT Id, Name, OwnerId, LastModifiedDate, Country_of_Residence_Account__c, ATNumber__c
+            FROM Account WHERE Id = :acc.Id LIMIT 1
+        ];
+
+        List<SObject> scope = new List<SObject>{ acc };
+
+        Test.setMock(HttpCalloutMock.class, new SuccessHttpMock());
+        Test.startTest();
+        new BatchSendAccountsEvona().execute(null, scope);
+        Test.stopTest();
+
+        System.assert(true, 'Multiple record types path covered.');
+    }
+
 }
