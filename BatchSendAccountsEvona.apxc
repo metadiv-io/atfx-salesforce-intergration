@@ -1,12 +1,16 @@
 global class BatchSendAccountsEvona implements Database.Batchable<SObject>, Database.AllowsCallouts {
   
-  // Define target countries
-  private static final Set<String> TARGET_COUNTRIES = new Set<String>{
-    'AIA', 'ATG', 'ARG', 'BHS', 'BRB', 'BLZ', 'BMU', 'BOL', 'BRA', 'VGB', 
-    'CYM', 'CHL', 'COL', 'CRI', 'CUB', 'DMA', 'DOM', 'ECU', 'SLV', 'GRD', 
-    'GTM', 'GUY', 'HTI', 'HND', 'JAM', 'MEX', 'NIC', 'PAN', 'PRY', 'PER', 
-    'PRI', 'URY', 'VEN', 'VNM'
-  };
+  private String mode;
+
+  // Constructor to set the mode (default to 'Account' if null)
+  global BatchSendAccountsEvona(String mode) {
+    this.mode = (mode == null) ? 'Account' : mode;
+  }
+
+  // Default constructor for backward compatibility
+  global BatchSendAccountsEvona() {
+    this.mode = 'Account';
+  }
   
   // Define specific fields for each object type
   private static final List<String> LEAD_FIELDS = new List<String>{
@@ -164,11 +168,18 @@ global class BatchSendAccountsEvona implements Database.Batchable<SObject>, Data
 
     global Database.QueryLocator start(Database.BatchableContext bc) {
         Datetime fiveMinutesAgo = System.now().addMinutes(-5);
+        String soql;
 
-        // Query recently updated Account records
-        String soql = 'SELECT Id, LastModifiedDate FROM Account WHERE LastModifiedDate >= :fiveMinutesAgo';
+        if (this.mode == 'Lead') {
+            // Query recently updated Lead records without filters
+            soql = 'SELECT Id, LastModifiedDate FROM Lead WHERE LastModifiedDate >= :fiveMinutesAgo';
+        } else {
+            // Default to 'Account' mode
+            // Query recently updated Account records without filters
+            soql = 'SELECT Id, LastModifiedDate FROM Account WHERE LastModifiedDate >= :fiveMinutesAgo';
+        }
         
-        System.debug('Dynamic SOQL: ' + soql);
+        System.debug('Batch Mode: ' + this.mode + ', Dynamic SOQL: ' + soql);
         return Database.getQueryLocator(soql); 
     }
     
@@ -195,101 +206,130 @@ global class BatchSendAccountsEvona implements Database.Batchable<SObject>, Data
   }
 
     global void execute(Database.BatchableContext bc, List<SObject> scope) {
-      Datetime fiveMinutesAgo = System.now().addMinutes(-5);
+      System.debug('Execute Mode: ' + this.mode + ', Scope size: ' + scope.size());
       
-      System.debug('Scope size: ' + scope.size());
-
-      // Extract Account IDs from scope
-      Set<Id> accountIds = new Set<Id>();
-      for (SObject acc : scope) {
-        accountIds.add(acc.Id);
-      }
-
-      // Query Accounts first to get ATNumbers for related records
-      List<SObject> accounts = new List<SObject>();
-      Set<String> atNumbers = new Set<String>();
-      try {
-        accounts = queryAccountsByIds(accountIds);
-        System.debug('Found ' + accounts.size() + ' Accounts in scope (out of ' + accountIds.size() + ' Account IDs)');
-        if (accounts.isEmpty() && !accountIds.isEmpty()) {
-          System.debug('WARNING: No Accounts matched filter criteria. Accounts may not have Country_of_Residence_Account__c IN TARGET_COUNTRIES or ATNumber__c is null');
-          // Debug: Check what Account IDs we have and their fields
-          List<Account> debugAccounts = [SELECT Id, Name, Country_of_Residence_Account__c, ATNumber__c FROM Account WHERE Id IN :accountIds LIMIT 10];
-          System.debug('Sample Account details from scope: ' + JSON.serialize(debugAccounts));
-          System.debug('TARGET_COUNTRIES: ' + JSON.serialize(TARGET_COUNTRIES));
-        }
-        
-        // Extract ATNumbers for querying related records
-        for (SObject acc : accounts) {
-          Object atNumberObj = acc.get('ATNumber__c');
-          if (atNumberObj != null) {
-            atNumbers.add(String.valueOf(atNumberObj));
-          }
-        }
-        System.debug('Extracted ' + atNumbers.size() + ' ATNumbers from ' + accounts.size() + ' Accounts');
-      } catch (Exception e) {
-        System.debug('Error querying Accounts: ' + e.getMessage());
-        System.debug('Stack trace: ' + e.getStackTraceString());
-      }
-
-      // Query all four object types independently with their filtering criteria
-      // BUT only query records related to the Accounts in scope
       List<Map<String, Object>> allRecords = new List<Map<String, Object>>();
-      
-      // Extract filtered Account IDs before clearing accounts list
-      Set<Id> filteredAccountIds = new Set<Id>();
-      for (SObject acc : accounts) {
-        filteredAccountIds.add(acc.Id);
-      }
-      
-      // 1. Build Account records
-      try {
-        for (SObject acc : accounts) {
-          Map<String, Object> record = buildRecord('Account', acc);
-          if (record != null) allRecords.add(record);
-        }
-        accounts.clear(); // Free memory
-      } catch (Exception e) {
-        System.debug('Error building Account records: ' + e.getMessage());
-      }
-      
-      // 2. Query Leads with filtering (only related to Accounts in scope)
-      try {
-        List<SObject> leads = queryLeadsByATNumbers(atNumbers, fiveMinutesAgo);
-        System.debug('Found ' + leads.size() + ' Leads related to scope');
-        for (SObject lead : leads) {
-          Map<String, Object> record = buildRecord('Lead', lead);
-          if (record != null) allRecords.add(record);
-        }
-        leads.clear(); // Free memory
-      } catch (Exception e) {
-        System.debug('Error querying Leads: ' + e.getMessage());
-      }
-      
-      // 3. Query Trade Accounts with filtering (only related to filtered Accounts in scope)
-      try {
-        List<SObject> tradeAccounts = queryTradeAccountsByAccountIds(filteredAccountIds);
-        System.debug('Found ' + tradeAccounts.size() + ' Trade Accounts related to scope');
-        for (SObject ta : tradeAccounts) {
-          Map<String, Object> record = buildRecord('TradeAccount', ta);
-          if (record != null) allRecords.add(record);
-        }
-        tradeAccounts.clear(); // Free memory
-      } catch (Exception e) {
-        System.debug('Error querying Trade Accounts: ' + e.getMessage());
-      }
-      
-      // 4. Query Campaign Records with filtering (only related to Accounts in scope)
-      try {
-        List<SObject> campaignRecords = queryCampaignRecordsByATNumbers(atNumbers, fiveMinutesAgo);
-        System.debug('Found ' + campaignRecords.size() + ' Campaign Records related to scope');
-        for (SObject cr : campaignRecords) {
-          Map<String, Object> record = buildRecord('CampaignRecord', cr);
-          if (record != null) allRecords.add(record);
-        }
-        campaignRecords.clear(); // Free memory
-      } catch (Exception e) {
-        System.debug('Error querying Campaign Records: ' + e.getMessage());
+      Map<String, Map<String, String>> fieldLabelMaps = new Map<String, Map<String, String>>();
+
+      if (this.mode == 'Lead') {
+          // Handle Lead mode
+          for (SObject lead : scope) {
+              // Re-query to get all fields
+              // Note: Ideally we should query all fields in start() or here in bulk, 
+              // but following the pattern of queryLeadsByIds for consistency
+          }
+          
+          Set<Id> leadIds = new Set<Id>();
+          for (SObject l : scope) {
+              leadIds.add(l.Id);
+          }
+          
+          try {
+              List<SObject> leads = queryLeadsByIds(leadIds);
+              System.debug('Found ' + leads.size() + ' Leads in scope');
+              for (SObject lead : leads) {
+                  Map<String, Object> record = buildRecord('Lead', lead);
+                  if (record != null) allRecords.add(record);
+              }
+          } catch (Exception e) {
+              System.debug('Error querying Leads: ' + e.getMessage());
+          }
+          
+          fieldLabelMaps.put('Lead', buildFieldLabelMap('Lead', LEAD_FIELDS));
+
+      } else {
+          // Handle Account mode (default)
+          Datetime fiveMinutesAgo = System.now().addMinutes(-5);
+
+          // Extract Account IDs from scope
+          Set<Id> accountIds = new Set<Id>();
+          for (SObject acc : scope) {
+            accountIds.add(acc.Id);
+          }
+
+          // Query Accounts first to get ATNumbers for related records
+          List<SObject> accounts = new List<SObject>();
+          Set<String> atNumbers = new Set<String>();
+          try {
+            accounts = queryAccountsByIds(accountIds);
+            System.debug('Found ' + accounts.size() + ' Accounts in scope (out of ' + accountIds.size() + ' Account IDs)');
+            
+            // Extract ATNumbers for querying related records
+            for (SObject acc : accounts) {
+              Object atNumberObj = acc.get('ATNumber__c');
+              if (atNumberObj != null) {
+                atNumbers.add(String.valueOf(atNumberObj));
+              }
+            }
+            System.debug('Extracted ' + atNumbers.size() + ' ATNumbers from ' + accounts.size() + ' Accounts');
+          } catch (Exception e) {
+            System.debug('Error querying Accounts: ' + e.getMessage());
+            System.debug('Stack trace: ' + e.getStackTraceString());
+          }
+
+          // Query all four object types independently
+          // BUT only query records related to the Accounts in scope
+          
+          // Extract filtered Account IDs before clearing accounts list
+          Set<Id> filteredAccountIds = new Set<Id>();
+          for (SObject acc : accounts) {
+            filteredAccountIds.add(acc.Id);
+          }
+          
+          // 1. Build Account records
+          try {
+            for (SObject acc : accounts) {
+              Map<String, Object> record = buildRecord('Account', acc);
+              if (record != null) allRecords.add(record);
+            }
+            accounts.clear(); // Free memory
+          } catch (Exception e) {
+            System.debug('Error building Account records: ' + e.getMessage());
+          }
+          
+          // 2. Query Leads (related to Accounts in scope)
+          try {
+            List<SObject> leads = queryLeadsByATNumbers(atNumbers, fiveMinutesAgo);
+            System.debug('Found ' + leads.size() + ' Leads related to scope');
+            for (SObject lead : leads) {
+              Map<String, Object> record = buildRecord('Lead', lead);
+              if (record != null) allRecords.add(record);
+            }
+            leads.clear(); // Free memory
+          } catch (Exception e) {
+            System.debug('Error querying Leads: ' + e.getMessage());
+          }
+          
+          // 3. Query Trade Accounts (related to filtered Accounts in scope)
+          try {
+            List<SObject> tradeAccounts = queryTradeAccountsByAccountIds(filteredAccountIds);
+            System.debug('Found ' + tradeAccounts.size() + ' Trade Accounts related to scope');
+            for (SObject ta : tradeAccounts) {
+              Map<String, Object> record = buildRecord('TradeAccount', ta);
+              if (record != null) allRecords.add(record);
+            }
+            tradeAccounts.clear(); // Free memory
+          } catch (Exception e) {
+            System.debug('Error querying Trade Accounts: ' + e.getMessage());
+          }
+          
+          // 4. Query Campaign Records (related to Accounts in scope)
+          try {
+            List<SObject> campaignRecords = queryCampaignRecordsByATNumbers(atNumbers, fiveMinutesAgo);
+            System.debug('Found ' + campaignRecords.size() + ' Campaign Records related to scope');
+            for (SObject cr : campaignRecords) {
+              Map<String, Object> record = buildRecord('CampaignRecord', cr);
+              if (record != null) allRecords.add(record);
+            }
+            campaignRecords.clear(); // Free memory
+          } catch (Exception e) {
+            System.debug('Error querying Campaign Records: ' + e.getMessage());
+          }
+          
+          fieldLabelMaps.put('Account', buildFieldLabelMap('Account', ACCOUNT_FIELDS));
+          fieldLabelMaps.put('Lead', buildFieldLabelMap('Lead', LEAD_FIELDS));
+          fieldLabelMaps.put('TradeAccount', buildFieldLabelMap('TradeAccount__c', TRADE_ACCOUNT_FIELDS));
+          fieldLabelMaps.put('CampaignRecord', buildFieldLabelMap('Campaign_Record__c', CAMPAIGN_RECORD_FIELDS));
       }
       
   // Count records by type for debugging
@@ -305,29 +345,11 @@ global class BatchSendAccountsEvona implements Database.Batchable<SObject>, Data
   System.debug('Record counts by type: ' + JSON.serialize(recordCountByType));
   System.debug('Total records collected: ' + allRecords.size());
   
-  // Capture ATNumbers for debugging before clearing
-  Set<String> atNumbersDebug = new Set<String>(atNumbers);
-  
-  // Clear ATNumbers set to free memory
-  atNumbers.clear();
-  
   // If no records to send, return
   if (allRecords.isEmpty()) {
-    System.debug('No records to send - allRecords is empty. This batch contained ' + scope.size() + ' Account(s) in scope, but none matched the filter criteria.');
-    System.debug('Check if Accounts have: Country_of_Residence_Account__c IN TARGET_COUNTRIES AND ATNumber__c != null');
-    System.debug('Account IDs in scope: ' + JSON.serialize(accountIds));
-    System.debug('ATNumbers extracted: ' + JSON.serialize(atNumbersDebug));
-    System.debug('Record counts by type: ' + JSON.serialize(recordCountByType));
+    System.debug('No records to send - allRecords is empty.');
     return;
   }
-
-  // Build field API name → label maps for the SPECIFIC fields only
-  // Note: These are static and could be cached, but building them here to avoid heap issues
-  Map<String, Map<String, String>> fieldLabelMaps = new Map<String, Map<String, String>>();
-  fieldLabelMaps.put('Account', buildFieldLabelMap('Account', ACCOUNT_FIELDS));
-  fieldLabelMaps.put('Lead', buildFieldLabelMap('Lead', LEAD_FIELDS));
-  fieldLabelMaps.put('TradeAccount', buildFieldLabelMap('TradeAccount__c', TRADE_ACCOUNT_FIELDS));
-  fieldLabelMaps.put('CampaignRecord', buildFieldLabelMap('Campaign_Record__c', CAMPAIGN_RECORD_FIELDS));
 
     // Build wrapper for payload
     Map<String, Object> wrapper = new Map<String, Object>();
@@ -365,7 +387,15 @@ global class BatchSendAccountsEvona implements Database.Batchable<SObject>, Data
   }
 
     global void finish(Database.BatchableContext bc) {
-        System.debug('BatchSendAccountsEvona.finish() called');
+        System.debug('BatchSendAccountsEvona.finish() called for mode: ' + this.mode);
+        
+        // If we just finished 'Account' mode, chain the 'Lead' mode batch
+        // Check !Test.isRunningTest() to prevent chaining in test context
+        if (this.mode == 'Account' && !Test.isRunningTest()) {
+            System.debug('Chaining Lead batch...');
+            BatchSendAccountsEvona leadBatch = new BatchSendAccountsEvona('Lead');
+            Database.executeBatch(leadBatch, 200);
+        }
     }
     
     // Build a record map with unique ID and all fields
@@ -386,50 +416,66 @@ global class BatchSendAccountsEvona implements Database.Batchable<SObject>, Data
       return result;
     }
     
-    // Query Accounts by IDs from scope - using specific fields
+    // Query Accounts by IDs from scope - using specific fields, NO FILTERS
     private List<SObject> queryAccountsByIds(Set<Id> accountIds) {
       if (accountIds.isEmpty()) {
         return new List<SObject>();
       }
       
       String fields = String.join(ACCOUNT_FIELDS, ', ');
-      String query = 'SELECT ' + fields + ' FROM Account WHERE Id IN :accountIds AND Country_of_Residence_Account__c IN :TARGET_COUNTRIES AND ATNumber__c != null';
+      // Removed TARGET_COUNTRIES and ATNumber__c filter
+      String query = 'SELECT ' + fields + ' FROM Account WHERE Id IN :accountIds';
       List<SObject> results = Database.query(query);
       return results;
     }
     
-    // Query Leads related to Accounts in scope - using specific fields
+    // Query Leads related to Accounts in scope - using specific fields, NO FILTERS
     private List<SObject> queryLeadsByATNumbers(Set<String> atNumbers, Datetime fiveMinutesAgo) {
       if (atNumbers.isEmpty()) {
         return new List<SObject>();
       }
       
       String fields = String.join(LEAD_FIELDS, ', ');
-      String query = 'SELECT ' + fields + ' FROM Lead WHERE LastModifiedDate >= :fiveMinutesAgo AND ATNumber__c IN :atNumbers AND Country_of_Residence_Lead__c IN :TARGET_COUNTRIES AND Is_Duplicated_Lead__c = false AND Is_Test_Account__c = false';
+      // Removed TARGET_COUNTRIES, Is_Duplicated_Lead__c, Is_Test_Account__c filters
+      String query = 'SELECT ' + fields + ' FROM Lead WHERE LastModifiedDate >= :fiveMinutesAgo AND ATNumber__c IN :atNumbers';
       List<SObject> results = Database.query(query);
       return results;
     }
     
-    // Query Trade Accounts by Account IDs from scope - using specific fields
+    // Query Leads by IDs (for Lead mode) - using specific fields, NO FILTERS
+    private List<SObject> queryLeadsByIds(Set<Id> leadIds) {
+      if (leadIds.isEmpty()) {
+        return new List<SObject>();
+      }
+      
+      String fields = String.join(LEAD_FIELDS, ', ');
+      String query = 'SELECT ' + fields + ' FROM Lead WHERE Id IN :leadIds';
+      List<SObject> results = Database.query(query);
+      return results;
+    }
+    
+    // Query Trade Accounts by Account IDs from scope - using specific fields, NO FILTERS
     private List<SObject> queryTradeAccountsByAccountIds(Set<Id> accountIds) {
       if (accountIds.isEmpty()) {
         return new List<SObject>();
       }
       
       String fields = String.join(TRADE_ACCOUNT_FIELDS, ', ');
-      String query = 'SELECT ' + fields + ' FROM TradeAccount__c WHERE Related_Account__c IN :accountIds AND MtStatus__c IN (\'Active\', \'Suspend\') AND IsDelete__c = false';
+      // Removed MtStatus__c and IsDelete__c filters
+      String query = 'SELECT ' + fields + ' FROM TradeAccount__c WHERE Related_Account__c IN :accountIds';
       List<SObject> results = Database.query(query);
       return results;
     }
     
-    // Query Campaign Records related to Accounts in scope - using specific fields
+    // Query Campaign Records related to Accounts in scope - using specific fields, NO FILTERS
     private List<SObject> queryCampaignRecordsByATNumbers(Set<String> atNumbers, Datetime fiveMinutesAgo) {
       if (atNumbers.isEmpty()) {
         return new List<SObject>();
       }
       
       String fields = String.join(CAMPAIGN_RECORD_FIELDS, ', ');
-      String query = 'SELECT ' + fields + ' FROM Campaign_Record__c WHERE LastModifiedDate >= :fiveMinutesAgo AND ATNumber__c IN :atNumbers AND Country_of_Residence_Lead__c IN :TARGET_COUNTRIES';
+      // Removed TARGET_COUNTRIES filter
+      String query = 'SELECT ' + fields + ' FROM Campaign_Record__c WHERE LastModifiedDate >= :fiveMinutesAgo AND ATNumber__c IN :atNumbers';
       List<SObject> results = Database.query(query);
       return results;
     }

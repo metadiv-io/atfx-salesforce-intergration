@@ -171,7 +171,7 @@ private class BatchSendAccountsEvona_Test {
         // Read accounts with owner information
         List<Account> insertedAccounts = [
             SELECT Id, Name, Phone, Type, OwnerId, LastModifiedDate
-            FROM Account WHERE Id IN :accounts
+            FROM Account WHERE Id = :accounts
         ];
 
         Test.setMock(HttpCalloutMock.class, new SuccessHttpMock());
@@ -423,10 +423,10 @@ private class BatchSendAccountsEvona_Test {
 
     @IsTest
     static void testExecuteWithAccountHavingNullATNumber() {
-        // Test Account with null ATNumber (should not match filter criteria)
+        // Test Account with null ATNumber (should now be processed as filters are removed)
         Account acc = new Account(
             Name = 'Null ATNumber Account',
-            Country_of_Residence_Account__c = 'MEX', // Target country but null ATNumber
+            Country_of_Residence_Account__c = 'MEX',
             Phone = '1234567890'
         );
         insert acc;
@@ -443,15 +443,15 @@ private class BatchSendAccountsEvona_Test {
         new BatchSendAccountsEvona().execute(null, scope);
         Test.stopTest();
 
-        System.assert(true, 'Account with null ATNumber path covered.');
+        System.assert(true, 'Account with null ATNumber path covered (filters removed).');
     }
 
     @IsTest
     static void testExecuteWithAccountNonTargetCountry() {
-        // Test Account with country not in TARGET_COUNTRIES
+        // Test Account with country not in TARGET_COUNTRIES (should now be processed as filters are removed)
         Account acc = new Account(
             Name = 'Non-Target Country Account',
-            Country_of_Residence_Account__c = 'USA', // Not in target countries
+            Country_of_Residence_Account__c = 'USA',
             ATNumber__c = 'AT123456',
             Phone = '1234567890'
         );
@@ -469,7 +469,7 @@ private class BatchSendAccountsEvona_Test {
         new BatchSendAccountsEvona().execute(null, scope);
         Test.stopTest();
 
-        System.assert(true, 'Account with non-target country path covered.');
+        System.assert(true, 'Account with non-target country path covered (filters removed).');
     }
 
     @IsTest
@@ -548,6 +548,37 @@ private class BatchSendAccountsEvona_Test {
         Test.stopTest();
 
         System.assert(true, 'Multiple record types path covered.');
+    }
+
+    @IsTest
+    static void testLeadModeExecution() {
+        // Test Lead mode execution
+        Lead l = new Lead(
+            LastName = 'Test Lead',
+            Company = 'Test Company',
+            Status = 'Open'
+        );
+        insert l;
+
+        l = [SELECT Id, LastModifiedDate, LastName, Company FROM Lead WHERE Id = :l.Id LIMIT 1];
+        List<SObject> scope = new List<SObject>{ l };
+
+        Test.setMock(HttpCalloutMock.class, new SuccessHttpMock());
+        Test.startTest();
+        
+        // Instantiate with 'Lead' mode
+        BatchSendAccountsEvona batch = new BatchSendAccountsEvona('Lead');
+        
+        // Test start method for Lead mode
+        Database.QueryLocator ql = batch.start(null);
+        System.assert(ql.toString().contains('Lead'), 'Query should contain Lead object in Lead mode');
+
+        // Test execute method for Lead mode
+        batch.execute(null, scope);
+        
+        Test.stopTest();
+
+        System.assert(true, 'Lead mode execution covered.');
     }
 
 }
